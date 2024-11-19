@@ -125,7 +125,7 @@ sir_files <- c(
   "Data/SIR/soil_sir_11.19.csv"
 )
 
-gwc_file <- "Data/SIR/soilGWC_2023.csv"
+gwc_file <- "Data/SIR/soilGWC_predators.csv"
 
 process_sir_data <- function(sir_files, gwc_file) {
   all_sir_data <- list()

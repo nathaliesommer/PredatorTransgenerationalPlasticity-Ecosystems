@@ -1,6 +1,6 @@
 ### N-mineralization ----
 
-# Object needed: N_min_calc
+# Object needed from this script: N_min_calc
 
 
 ## Notes
@@ -63,3 +63,4 @@ N_min_calc <- N_min_calc %>%
   select(Sample_ID, NH4_rate, NO3_rate, Overall_rate)  # Keep only the specified columns
 
 ## Units are (mg N/cm² per month)
+
