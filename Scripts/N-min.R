@@ -17,8 +17,54 @@ library(dplyr)
 
 # Read-in data
 
-N_min <- read.csv("Data/N-min.csv") # NOTE: N-min data was blank-adjusted by the processing lab
+N_min <- read.csv("Data/N-min.csv") # NOTE: 2023 N-min data was blank-adjusted by the processing lab
+N_min_2021 <- read.csv("Data/2021_N-min.csv") # Baseline data not blank-adjusted, calc below
 BulkDensity <- read.csv("Data/BulkDensity.csv")
+
+
+# Standardize N_min_2021 with blank correction and column names
+N_min_2021 <- N_min_2021 %>%
+  group_by(Batch) %>%
+  mutate(
+    N_NO3_blank_avg = mean(`N.NO3..mg.per.mL.`[Sample.ID == "Blank"]),
+    N_NH4_blank_avg = mean(`N.NH4..mg.per.mL.`[Sample.ID == "Blank"])
+  ) %>%
+  mutate(
+    NO3 = `N.NO3..mg.per.mL.` - N_NO3_blank_avg,
+    NH4 = `N.NH4..mg.per.mL.` - N_NH4_blank_avg
+  ) %>%
+  mutate(
+    Site = "UP"
+  ) %>% 
+  ungroup() %>%
+  select(Sample.ID, Day, NO3, NH4, Site) %>%  # Keep only needed columns
+  rename(Sample_ID = Sample.ID)  # Standardize ID column name
+
+# Standardize N_min column names
+N_min <- N_min %>%
+  rename(
+    NO3 = blank.corrected.N.NO3..mg.per.mL.,
+    NH4 = blank.corrected.N.NH4..mg.per.mL.
+  )
+
+# Get matching samples and add years
+matching_samples <- unique(N_min$Sample_ID)
+
+N_min_2021 <- N_min_2021 %>%
+  filter(Sample_ID %in% matching_samples) %>%
+  mutate(Year = 2021)
+
+N_min <- N_min %>%
+  mutate(Year = 2023)
+
+# Combine datasets
+N_min_combined <- bind_rows(N_min_2021, N_min)
+
+
+
+
+
+
 
 # Bulk Density calculation
 BulkDensity <- BulkDensity %>% 
@@ -27,40 +73,38 @@ BulkDensity <- BulkDensity %>%
   mutate(SoilBulkDensity = (SoilMassAdj / 308.89)) # units = g/cm^3, where 308.89 is the cm^3 of the sampler
 
 
-
 # Bulk Density, unit conversion 
 BulkDensity_avg <- BulkDensity %>%
   group_by(Site) %>%
   summarize(SoilBulkDensity_avg = mean(SoilBulkDensity))
 
 
-calculate_rate <- function(data, year, soil_depth = 10) {
+# Update calculate_rate function to use new column names
+calculate_rate <- function(data, soil_depth = 10) {
   data %>%
     left_join(BulkDensity_avg, by = "Site") %>%
-    group_by(Sample_ID) %>%
-    # Filter for the first and last day
+    group_by(Sample_ID, Year) %>%
     filter(Day == min(Day) | Day == max(Day)) %>%
     arrange(Day) %>%
-    # Calculate differences between the last and first day
     mutate(
-      NH4_diff = `blank.corrected.N.NH4..mg.per.mL.`[2] - `blank.corrected.N.NH4..mg.per.mL.`[1],
-      NO3_diff = `blank.corrected.N.NO3..mg.per.mL.`[2] - `blank.corrected.N.NO3..mg.per.mL.`[1],
-      # Calculate rates, scaled to per month and converted to mg/cm³
-      NH4_rate = (NH4_diff * 1) * SoilBulkDensity_avg * soil_depth, # mg/cm³ per month
-      NO3_rate = (NO3_diff * 1) * SoilBulkDensity_avg * soil_depth, # mg/cm³ per month
-      Overall_rate = NH4_rate + NO3_rate
+      NH4_diff = NH4[2] - NH4[1],
+      NO3_diff = NO3[2] - NO3[1],
+      NH4_rate = (NH4_diff * 1) * SoilBulkDensity_avg * soil_depth,
+      NO3_rate = (NO3_diff * 1) * SoilBulkDensity_avg * soil_depth,
+      Overall_mineralization_rate = NH4_rate + NO3_rate
     ) %>%
     ungroup()
 }
 
 
-
-N_min_calc <- calculate_rate(N_min)
+N_min_calc <- calculate_rate(N_min_combined)
 
 # Clean up the data frame after calculating rates
 N_min_calc <- N_min_calc %>%
-  filter(Day != 30) %>%  # Drop rows where Day equals 30
-  select(Sample_ID, NH4_rate, NO3_rate, Overall_rate)  # Keep only the specified columns
+  group_by(Sample_ID, Year) %>%
+  slice(1) %>%  # Keep only the first row for each Sample_ID and year combination
+  ungroup() %>%
+  select(Sample_ID, NH4_rate, NO3_rate, Overall_mineralization_rate, Year)  # Keep only the specified columns
 
 ## Units are (mg N/cm² per month)
 

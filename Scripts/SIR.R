@@ -2,8 +2,9 @@
 ## Code by A. Polussa, A.M. Dobson, N.R. Sommer
 # UPDATED Sep 17 2024
 
-library(tidyverse)
+library(readr)
 library(dplyr)
+library(tidyr)
 
 # Function to calculate mean standard values
 calculate_mean_standard <- function(stds) {
@@ -117,15 +118,26 @@ calculate_sir <- function(sir, gwc) {
 }
 
 # Main script
-
-sir_files <- c(
+sir_files_2021 <- c(
+  "Data/SIR/soil_sir_11.21.csv", 
+  "Data/SIR/soil_sir_11.27.csv", 
+  "Data/SIR/soil_sir_11.28.csv", 
+  "Data/SIR/soil_sir_11.29.csv", 
+  "Data/SIR/soil_sir_12.27.csv", 
+  "Data/SIR/soil_sir_12.29.csv", 
+  "Data/SIR/soil_sir_1.1.csv"
+)
+sir_files_2023 <- c(
   "Data/SIR/soil_sir_11.08.csv", 
   "Data/SIR/soil_sir_11.14.csv", 
   "Data/SIR/soil_sir_11.17.csv", 
-  "Data/SIR/soil_sir_11.19.csv"
-)
-
-gwc_file <- "Data/SIR/soilGWC_predators.csv"
+  "Data/SIR/soil_sir_11.19.csv")
+  
+  
+  
+  
+gwc_file_2021 <- "Data/SIR/soilGWC_2021.csv"
+gwc_file_2023 <- "Data/SIR/soilGWC_predators.csv"
 
 process_sir_data <- function(sir_files, gwc_file) {
   all_sir_data <- list()
@@ -140,23 +152,40 @@ process_sir_data <- function(sir_files, gwc_file) {
   all_sir_data
 }
 
-
-# Process data
-sir_data <- process_sir_data(sir_files, gwc_file)
-
-
-
-# Combine with metadata data
-prep_data <- read.csv("Data/SIR/SIR Prep_predators.csv") %>%
+# Process 2023 data first to get the Sample_IDs we want to match
+sir_data_2023 <- process_sir_data(sir_files_2023, gwc_file_2023)
+prep_data_2023 <- read_csv("Data/SIR/SIR Prep_predators.csv", show_col_types = FALSE) %>%
   select(Sample_ID, unique.id)
 
-joined_data <- left_join(sir_data, prep_data, by = "unique.id") %>%
+c_2023 <- left_join(sir_data_2023, prep_data_2023, by = "unique.id") %>%
+  mutate(Year = 2023) %>% 
   drop_na()
 
-# Calculate the average CO2CperHourperg for each Sample_ID within each year
+# Get the list of Sample_IDs from 2023
+sample_ids_to_match <- unique(c_2023$Sample_ID)
 
-SIR_avg <- joined_data %>%
-  group_by(Sample_ID) %>%
+# Process 2021 data
+sir_data_2021 <- process_sir_data(sir_files_2021, gwc_file_2021) # warning expected
+
+prep_data_2021 <- read_csv("Data/SIR/SIR Prep_2021.csv", show_col_types = FALSE) %>%
+  select(Sample_ID, unique.id)
+
+c_2021 <- left_join(sir_data_2021, prep_data_2021, by = "unique.id") %>%
+  mutate(Year = 2021) %>%
+  filter(Sample_ID %in% sample_ids_to_match) %>%
+  drop_na()
+
+# Calculate averages for each year
+SIR_avg_2021 <- c_2021 %>%
+  group_by(Sample_ID, Year) %>%
   summarize(CO2CperHourperg = mean(CO2CperHourperg, na.rm = TRUE))
+
+SIR_avg_2023 <- c_2023 %>%
+  group_by(Sample_ID, Year) %>%
+  summarize(CO2CperHourperg = mean(CO2CperHourperg, na.rm = TRUE))
+
+# Combine the data
+SIR_final <- bind_rows(SIR_avg_2021, SIR_avg_2023) %>%
+  arrange(Sample_ID, Year)
 
 

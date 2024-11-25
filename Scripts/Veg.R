@@ -11,11 +11,20 @@ library(ggplot2)
 ### Biomass ----
 vegmass <- read.csv("Data/Biomass-plots_predators.csv") # biomass plots 
 
-vegmass <- vegmass %>% # unit conversion
+vegmass <- vegmass %>% 
   mutate(
-    Biomass_Bag_g = Biomass_Bag_kg * 1000,
-    Bag_g = Bag_kg * 1000,
-    Biomass_g = Biomass_kg * 1000
+    Biomass_Bag_g = case_when(
+      Year == 2023 ~ Biomass_Bag_kg * 1000,
+      TRUE ~ Biomass_Bag_kg 
+    ),
+    Bag_g = case_when(
+      Year == 2023 ~ Bag_kg * 1000,
+      TRUE ~ Bag_kg 
+    ),
+    Biomass_g = case_when(
+      Year == 2023 ~ Biomass_kg * 1000,
+      TRUE ~ Biomass_kg 
+    )
   )
 
 vegmass <- vegmass %>%
@@ -23,25 +32,25 @@ vegmass <- vegmass %>%
 
 
 ### Cover ----
-diversity <- read.csv("Data/Vegetation.cover.2023_predators.csv") # plant percent cover 2023
+diversity <- read.csv("Data/Vegetation.cover_predators.csv") # plant percent cover
 
 
 cage_diversity <- diversity %>%
   select(-BARE) %>% # remove bare ground
   rowwise() %>%
-  mutate(Cover_Sum = sum(c_across(-c(Sample_ID)))) %>% # sum plant cover 
+  mutate(Cover_Sum = sum(c_across(-c(Sample_ID, Year)))) %>% # sum plant cover 
   ungroup()
 
 cage_diversity <- cage_diversity %>% # normalize cover to 100%
   mutate(across(
-    .cols = -c(Sample_ID),
+    .cols = -c(Sample_ID, Year),
     .fns = ~ round((.x / Cover_Sum) * 100)
   ))
 
 cage_diversity_long <- cage_diversity %>%
   select(-Cover_Sum) %>% 
   pivot_longer(
-    cols = -c(Sample_ID),
+    cols = -c(Sample_ID, Year),
     names_to = "Species_ID",
     values_to = "Cover"
   )
@@ -50,7 +59,7 @@ cage_diversity_long <- cage_diversity %>%
 
 
 functional_groups <- cage_diversity_long %>%
-  group_by(Sample_ID) %>% 
+  group_by(Sample_ID, Year) %>% 
   summarise(
     SORU = sum(Cover[Species_ID %in% c("SORU2", "SOCA6")], na.rm = TRUE),
     POPRC = sum(Cover[Species_ID == "POPRC"], na.rm = TRUE),
@@ -60,10 +69,17 @@ functional_groups <- cage_diversity_long %>%
   ungroup() %>% 
   drop_na()
 
+# Create functional_groups_wide
+functional_groups_wide <- functional_groups %>%
+  pivot_wider(
+    names_from = Species_ID,
+    values_from = Cover
+  )
+
 
 
 ## Allometry ----
-# Use biomass plots to estimate the biomass in cages from % cover
+# Use biomass plots to estimate the biomass in cages from % cover, separated by Site and Year
 
 # Calculate the biomass for each plant group within biomass plots
 vegmass <- vegmass %>%
@@ -73,55 +89,35 @@ vegmass <- vegmass %>%
     MISC_Biomass = (MISC / 100) * Biomass_g
   )
 
-# Fit models for each group
-SORU_model <- lm(SORU_Biomass ~ SORU, data = vegmass)
-POPRC_model <- lm(POPRC_Biomass ~ POPRC, data = vegmass)
-MISC_model <- lm(MISC_Biomass ~ MISC, data = vegmass)
+# Fit models for each group by Site and Year
+model_fits <- vegmass %>%
+  group_by(Site, Year) %>%
+  group_split() %>%
+  map(function(df) {
+    list(
+      SORU_model = lm(SORU_Biomass ~ SORU, data = df),
+      POPRC_model = lm(POPRC_Biomass ~ POPRC, data = df),
+      MISC_model = lm(MISC_Biomass ~ MISC, data = df)
+    )
+  })
 
-# Diagnostic plots for SORU
-diagnostic_plot_SORU <- ggplot(vegmass, aes(x = SORU, y = SORU_Biomass)) +
-  geom_point() +
-  geom_smooth(method = "lm", se = FALSE) +
-  ggtitle("SORU Check")
-
-# Diagnostic plots for POPRC
-diagnostic_plot_POPRC <- ggplot(vegmass, aes(x = POPRC, y = POPRC_Biomass)) +
-  geom_point() +
-  geom_smooth(method = "lm", se = FALSE) +
-  ggtitle("POPRC Check")
-
-# Diagnostic plots for MISC
-diagnostic_plot_MISC <- ggplot(vegmass, aes(x = MISC, y = MISC_Biomass)) +
-  geom_point() +
-  geom_smooth(method = "lm", se = FALSE) +
-  ggtitle("MISC Check")
-
-
-
-functional_groups_wide <- functional_groups %>%
-  pivot_wider(names_from = Species_ID, values_from = Cover) %>%
-  # Replace missing cover values (e.g., if some species are missing from some plots) with 0
-  mutate(
-    SORU = as.numeric(coalesce(SORU, 0)),
-    POPRC = as.numeric(coalesce(POPRC, 0)),
-    MISC = as.numeric(coalesce(MISC, 0))
-  )
-
-
-model_fits <- list(
-  SORU_model = lm(SORU_Biomass ~ SORU, data = vegmass),
-  POPRC_model = lm(POPRC_Biomass ~ POPRC, data = vegmass),
-  MISC_model = lm(MISC_Biomass ~ MISC, data = vegmass)
-)
-
-# Apply models row by row
+# Then apply the models
 functional_groups_wide <- functional_groups_wide %>%
-  rowwise() %>%
-  mutate(
-    SORU_Biomass = predict(model_fits$SORU_model, newdata = data.frame(SORU = SORU)),
-    POPRC_Biomass = predict(model_fits$POPRC_model, newdata = data.frame(POPRC = POPRC)),
-    MISC_Biomass = predict(model_fits$MISC_model, newdata = data.frame(MISC = MISC))
-  ) %>%
+  mutate(Site = "UP") %>%  # Add Site if not already present
+  group_by(Site, Year) %>%
+  group_modify(function(df, group_keys) {
+    # Get the corresponding model for this Year
+    model_index <- if(group_keys$Year == 2021) 1 else 2
+    
+    site_year_models <- model_fits[[model_index]]
+    
+    df %>%
+      mutate(
+        SORU_Biomass = predict(site_year_models$SORU_model, newdata = data.frame(SORU = SORU)),
+        POPRC_Biomass = predict(site_year_models$POPRC_model, newdata = data.frame(POPRC = POPRC)),
+        MISC_Biomass = predict(site_year_models$MISC_model, newdata = data.frame(MISC = MISC))
+      )
+  }) %>%
   ungroup()
 
 ### Diversity Index Calculation ----
@@ -142,10 +138,11 @@ calculate_diversity_indices <- function(data) {
       PlantDiversity = calculate_shannon_weiner(c_across(-c(Sample_ID)))
     ) %>%
     ungroup() %>%
-    select(Sample_ID, PlantRichness, PlantDiversity)
+    select(Sample_ID, PlantRichness, PlantDiversity, Year)
 }
 
 
 
 # Calculate diversity indices for each dataset
 diversity_calc <- calculate_diversity_indices(diversity)
+
