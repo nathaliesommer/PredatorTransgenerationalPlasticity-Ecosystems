@@ -1,5 +1,6 @@
-# GenEffects on Ecosystems:
-
+# Title: Predator Effects Magnified in Ecosystems
+# Script: Analyzes ecosystems data
+# Authors: N.R. Sommer
 
 # Objects needed: 
   # N-min.R: N_min_calc
@@ -49,9 +50,19 @@ combined_data <- combined_data %>%
   )
 
 
-# Relevel for model interpretation (update after filtering)
+# Relevel for model interpretation 
 combined_data$CageTreatment <- as.factor(combined_data$CageTreatment)
 combined_data$CageTreatment <- relevel(combined_data$CageTreatment, ref = "Vegetation")
+
+sample_sizes <- combined_data %>%
+  group_by(Population, CageTreatment) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  pivot_wider(names_from = CageTreatment, values_from = count)
+
+print("Sample sizes by Population and Treatment:")
+print(sample_sizes)
+
+
 
 # Packages
 library(lme4)
@@ -344,7 +355,7 @@ print(boot_summary)
 
 
 ### %N Soil ----
-# removed %N Soil 2021 for standard deviation = 0; failure in bootstrapping
+# %N Soil 2021 variable excluded for standard deviation = 0; failure in bootstrapping
 SoilN_model <- lmer(PercentN_SOIL_2023 ~ CageTreatment + PercentN_LITTER_2023 + 
                     SORU_Biomass_2023 + CO2CperHourperg_2021 + (1 | Population), 
                     data = combined_data)
@@ -399,8 +410,8 @@ boot_ci_table <- data.frame(
 
 # iterate over fixed effects to get bootstrapped CIs
 for (i in seq_along(coef(SoilN_model))) {
-  boot_ci_i <- boot.ci(boot_model, type = "perc", index = i)  # bootstrapped CI for all fixed effects
-  if (!is.null(boot_ci_i$percent)) {  # ensure boot.ci returned valid percentiles
+  boot_ci_i <- boot.ci(boot_model, type = "perc", index = i)
+  if (!is.null(boot_ci_i$percent)) {
     boot_ci_table$Boot_Lower[i] <- boot_ci_i$percent[4] 
     boot_ci_table$Boot_Upper[i] <- boot_ci_i$percent[5]
   } else {
@@ -417,31 +428,29 @@ if (nrow(original_ci) == nrow(boot_ci_table)) {
 }
 
 
-# compare bootstrapped estimates with original fixed effect estimates using `coef()` for lm objects
+# compare bootstrapped estimates with original estimates
 boot_summary <- data.frame(
   Fixed_Effect = names(coef(SoilN_model)),
   Original_Estimate = coef(SoilN_model),
-  Bootstrapped_Median = apply(boot_model$t, 2, median),
-  Difference = coef(SoilN_model) - apply(boot_model$t, 2, median)
+  Bootstrapped_Median = apply(boot_model$t, 2, median, na.rm = TRUE),
+  Difference = coef(SoilN_model) - apply(boot_model$t, 2, median, na.rm = TRUE)
 )
 
-print(ci_comparison) 
+print(ci_comparison)
+print(boot_summary)
 
-print(boot_summary) 
 
-
-# good; estimates are very stable
 
 ### SIR ----
 SIR_model <- lmer(CO2CperHourperg_2023 ~ PercentN_SOIL_2023 + PlantDiversity_2021 + 
-                  PercentN_SOIL_2021 + PercentN_POPRC_2021 + POPRC_Biomass_2021 + 
-                  POPRC_Biomass_2023 + CO2CperHourperg_2021 + (1 | Population), 
+                    PercentN_SOIL_2021 + PercentN_POPRC_2021 + POPRC_Biomass_2021 + 
+                    POPRC_Biomass_2023 + CO2CperHourperg_2021 + (1 | Population), 
                   data = combined_data)
 
 #### Check assumptions ----
 SIR_model_noRE <- lm(CO2CperHourperg_2023 ~ PercentN_SOIL_2023 + PlantDiversity_2021 + 
-                     PercentN_SOIL_2021 + PercentN_POPRC_2021 + POPRC_Biomass_2021 + 
-                     POPRC_Biomass_2023 + CO2CperHourperg_2021, data = combined_data)
+                       PercentN_SOIL_2021 + PercentN_POPRC_2021 + POPRC_Biomass_2021 + 
+                       POPRC_Biomass_2023 + CO2CperHourperg_2021, data = combined_data)
 
 VarCorr(SIR_model) # drop random effects
 anova(SIR_model, SIR_model_noRE)
@@ -454,35 +463,6 @@ simulation_output <- simulateResiduals(fittedModel = SIR_model)
 plot(simulation_output) # good
 testDispersion(simulation_output) # good
 testZeroInflation(simulation_output) # good
-
-
-### Plant Diversity ----
-PlantDiversity_model <- lmer(PlantDiversity_2023 ~ PercentC_SOIL_2023 + SORU_Biomass_2023 + 
-                              POPRC_Biomass_2023 + PercentN_SORU_2021 + PlantRichness_2021 + 
-                              Overall_mineralization_rate_2021 + PercentN_LITTER_2021 + 
-                              (1 | Population), data = combined_data)
-
-
-VarCorr(PlantDiversity_model) # drop random effects
-
-#### Check assumptions ----
-PlantDiversity_model_noRE <- lm(PlantDiversity_2023 ~ PercentC_SOIL_2023 + SORU_Biomass_2023 + 
-                                 POPRC_Biomass_2023 + PercentN_SORU_2021 + PlantRichness_2021 + 
-                                 Overall_mineralization_rate_2021 + PercentN_LITTER_2021, 
-                               data = combined_data)
-
-
-PlantDiversity_model <- PlantDiversity_model_noRE
-
-anova(PlantDiversity_model, PlantDiversity_model_noRE)
-
-vif(PlantDiversity_model_noRE) # good
-
-simulation_output <- simulateResiduals(fittedModel = PlantDiversity_model_noRE)
-plot(simulation_output) # good
-testDispersion(simulation_output) # good
-testZeroInflation(simulation_output) # good
-
 
 ### Plant Richness ----
 PlantRichness_model <- lmer(PlantRichness_2023 ~ PercentC_SOIL_2023 + SORU_Biomass_2023 + 
@@ -581,6 +561,8 @@ boot_summary <- data.frame(
 print(ci_comparison)
 print(boot_summary)
 
+
+
 # SEM ----
 library(piecewiseSEM)
 
@@ -653,7 +635,7 @@ treatment_categories <- c("CageTreatment = Herbivore",
                           "CageTreatment = F2_Predator",
                           "CageTreatment = F1_Predator")
 
-# Find direct paths from treatment categories
+# Find direct paths from the treatment categories
 direct_paths <- result[result$Predictor %in% treatment_categories, ]
 
 # Function to recursively find indirect paths
@@ -725,7 +707,7 @@ indirect_effects_df <- do.call(rbind, lapply(all_indirect_paths, function(path) 
   # Flatten the path into a single row
   data.frame(
     Treatment = path[[1]]$Treatment,
-    Intermediates = paste(sapply(path, function(x) x$Intermediate), collapse = " -> "),
+    Intermediates = paste(sapply(path, function(x) x$Intermediate),
     Indirect_Effect_Size = path[[length(path)]]$Indirect_Effect_Size
   )
 }))
@@ -838,7 +820,7 @@ trophic_impact_effects_df <- do.call(rbind, lapply(all_trophic_impact_paths, fun
   # Flatten the path into a single row
   data.frame(
     Treatment = path[[1]]$Treatment,
-    Intermediates = paste(sapply(path, function(x) x$Intermediate), collapse = " -> "),
+    Intermediates = paste(sapply(path, function(x) x$Intermediate)),
     Indirect_Effect_Size = path[[length(path)]]$Indirect_Effect_Size
   )
 }))
@@ -1013,11 +995,15 @@ filtered_paths <- find_downstream_paths(
 # Extract unique display labels for nodes involved in these paths
 unique_labels <- unique(c(filtered_paths$Predictor_Display_Label, filtered_paths$Response_Display_Label))
 
-# Initialize the DOT script
+# Initialize the DOT script with corrected ranks
 dot_script <- "digraph SEM_PathDiagram { 
-  rankdir=LR;
-  node [shape=rectangle, style=filled, fillcolor=lightblue];
+  rankdir=TB
+  node [shape=rectangle style=filled]
   
+  { rank=source \"Predator\" \"Herbivore\" \"Baseline grass biomass\" \"Baseline grass %C\" }
+  { rank=same \"Grass biomass\" \"Goldenrod biomass\" \"Soil %N\" \"Soil %C\" }
+  { rank=same \"Grass %C\" \"Plant richness\" }
+  { rank=sink \"Litter %C\" \"Nitrogen mineralization\" }
 "
 
 # Add nodes with shape customization and background color
@@ -1141,11 +1127,15 @@ filtered_paths <- find_downstream_paths(
 # Extract unique display labels for nodes involved in these paths
 unique_labels <- unique(c(filtered_paths$Predictor_Display_Label, filtered_paths$Response_Display_Label))
 
-# Initialize the DOT script
+# Initialize the DOT script with corrected ranks
 dot_script <- "digraph SEM_PathDiagram { 
-  rankdir=LR;
-  node [shape=rectangle, style=filled, fillcolor=lightblue];
+  rankdir=TB
+  node [shape=rectangle style=filled]
   
+  { rank=source \"Predator\" \"Herbivore\" \"Baseline grass biomass\" \"Baseline grass %C\" }
+  { rank=same \"Grass biomass\" \"Goldenrod biomass\" \"Soil %N\" \"Soil %C\" }
+  { rank=same \"Grass %C\" \"Plant richness\" }
+  { rank=sink \"Litter %C\" \"Nitrogen mineralization\" }
 "
 
 # Add nodes with shape customization and background color
@@ -1298,10 +1288,15 @@ if (nrow(filtered_paths_generations) > 0) {
   unique_labels_generations <- unique(c(filtered_paths_generations$Predictor_Display_Label, 
                                       filtered_paths_generations$Response_Display_Label))
   
-  # Initialize the DOT script
-  dot_script_generations <- "digraph SEM_PathDiagram_Generations { 
-    rankdir=LR;
-    node [shape=rectangle, style=filled, fillcolor=lightblue];
+  # Initialize the DOT script with corrected ranks
+  dot_script_generations <- "digraph SEM_PathDiagram { 
+    rankdir=TB
+    node [shape=rectangle style=filled]
+    
+    { rank=source \"Predator\" \"Herbivore\" \"Baseline grass biomass\" \"Baseline grass %C\" }
+    { rank=same \"Grass biomass\" \"Goldenrod biomass\" \"Soil %N\" \"Soil %C\" }
+    { rank=same \"Grass %C\" \"Plant richness\" }
+    { rank=sink \"Litter %C\" \"Nitrogen mineralization\" }
   "
   
   # Add nodes with shape customization and background color
@@ -1325,7 +1320,7 @@ if (nrow(filtered_paths_generations) > 0) {
     label <- sprintf("%.2f", estimate)
     
     dot_script_generations <- paste0(dot_script_generations, sprintf("  \"%s\" -> \"%s\" [color=%s, label=\"%s\", penwidth=%.2f];\n",
-                                                                     predictor, response, color, label, penwidth))
+                                                                 predictor, response, color, label, penwidth))
   }
   
   # Close the DOT script
@@ -1336,3 +1331,281 @@ if (nrow(filtered_paths_generations) > 0) {
 } else {
   warning("No paths available to render.")
 }
+
+
+# Pretty plot of the SEM ----
+library(DiagrammeR)
+
+# Define custom colors for treatments
+treatment_colors <- c(
+  "Herbivore" = "#9BA48C",
+  "Predator" = "#B5753C"
+)
+
+# Define node colors for treatment plot
+treatment_baseline_color <- "#A8A8A8"
+treatment_response_color <- "#F0F0F0"
+
+# Define nodes for the treatment SEM plot
+treatment_nodes <- data.frame(
+  name = c(
+    "Predator", "Herbivore",
+    "Baseline grass biomass", "Baseline grass %C",
+    "Grass biomass", "Goldenrod biomass", "Soil %N", "Soil %C",
+    "Grass %C", "Plant richness",
+    "Litter %C", "Nitrogen mineralization"
+  ),
+  fillcolor = c(
+    treatment_colors["Predator"], treatment_colors["Herbivore"],
+    treatment_baseline_color, treatment_baseline_color,
+    rep(treatment_response_color, 8)
+  ),
+  fontcolor = c(
+    "white", "white",  # For treatment nodes
+    rep("black", 10)   # For all other nodes
+  )
+)
+
+# Define edges for the treatment SEM plot
+treatment_edges <- data.frame(
+  from = c(
+    "Baseline grass biomass",
+    "Predator", "Predator", "Predator", "Predator", 
+    "Herbivore", "Herbivore", "Herbivore", "Herbivore",
+    "Baseline grass %C",
+    "Grass biomass", "Grass %C",
+    "Goldenrod biomass"
+  ),
+  to = c(
+    "Grass biomass",
+    "Grass biomass", "Goldenrod biomass", "Soil %N", "Soil %C",
+    "Goldenrod biomass", "Soil %N", "Soil %C", "Nitrogen mineralization",
+    "Soil %C",
+    "Grass %C", "Litter %C",
+    "Plant richness"
+  ),
+  value = c(
+    0.39,
+    8.64, -5.76, -4.65, 0.27,
+    12.52, 0.01, -0.04, 16.96,
+    0.10,
+    -0.04, 0.46,
+    -0.02
+  )
+)
+
+# Initialize the treatment DOT script
+treatment_dot_script <- "digraph SEM_PathDiagram { 
+  rankdir=TB
+  node [shape=rectangle style=filled fontname=\"Arial\"]
+  edge [fontname=\"Arial\"]
+  
+  { rank=source \"Predator\" \"Herbivore\" \"Baseline grass biomass\" \"Baseline grass %C\" }
+  { rank=same \"Grass biomass\" \"Goldenrod biomass\" \"Soil %N\" \"Soil %C\" }
+  { rank=same \"Grass %C\" \"Plant richness\" }
+  { rank=sink \"Litter %C\" \"Nitrogen mineralization\" }
+"
+
+# Add nodes with their properties
+for(i in 1:nrow(treatment_nodes)) {
+  treatment_dot_script <- paste0(treatment_dot_script,
+    sprintf("  \"%s\" [fillcolor=\"%s\" fontcolor=\"%s\"];\n",
+            treatment_nodes$name[i], 
+            treatment_nodes$fillcolor[i],
+            treatment_nodes$fontcolor[i]))
+}
+
+# Treatment plot edge creation
+for(i in 1:nrow(treatment_edges)) {
+  predictor <- treatment_edges$from[i]
+  response <- treatment_edges$to[i]
+  estimate <- treatment_edges$value[i]
+  
+  abs_estimate <- abs(estimate)
+  penwidth <- 1.5 + (abs_estimate / max(abs(treatment_edges$value))) * 5
+  
+  if(predictor %in% c("Grass biomass", "Goldenrod biomass", "Grass %C", "Plant richness", "Soil %N", "Soil %C")) {
+    # For downstream effects, create two brown lines
+    # First line with label
+    treatment_dot_script <- paste0(treatment_dot_script, 
+      sprintf("  \"%s\" -> \"%s\" [color=\"#A18D6B\", label=\" %.2f\", fontcolor=\"#A18D6B\", penwidth=%.2f, style=\"%s\"];\n",
+              predictor, response, estimate, penwidth,
+              if(estimate < 0) "dashed" else "solid"))
+    # Second line without label
+    treatment_dot_script <- paste0(treatment_dot_script, 
+      sprintf("  \"%s\" -> \"%s\" [color=\"#A18D6B\", label=\"\", penwidth=%.2f, style=\"%s\"];\n",
+              predictor, response, penwidth,
+              if(estimate < 0) "dashed" else "solid"))
+  } else {
+    # For treatment and baseline effects
+    edge_color <- if(predictor == "Predator") {
+      treatment_colors["Predator"]
+    } else if(predictor == "Herbivore") {
+      treatment_colors["Herbivore"]
+    } else {
+      "#000000"  # black for baseline effects
+    }
+    
+    treatment_dot_script <- paste0(treatment_dot_script, 
+      sprintf("  \"%s\" -> \"%s\" [color=\"%s\", label=\" %.2f\", fontcolor=\"%s\", penwidth=%.2f, style=\"%s\"];\n",
+              predictor, response, edge_color, estimate, edge_color, penwidth,
+              if(estimate < 0) "dashed" else "solid"))
+  }
+}
+
+# Close the treatment DOT script
+treatment_dot_script <- paste0(treatment_dot_script, "}")
+
+# Render the treatment plot
+treatment_plot <- grViz(treatment_dot_script)
+
+# Display plot
+treatment_plot
+
+# Pretty plot of Generational Effects ----
+
+# Define custom colors for generations
+generation_colors <- c(
+  "G1" = "#DEB887", 
+  "G2" = "#8B4513"
+)
+
+
+# Define node colors for generation plot
+generation_baseline_color <- "#A8A8A8"
+generation_response_color <- "#F0F0F0"
+
+# Define nodes for the generation SEM plot
+generation_nodes <- data.frame(
+  name = c(
+    "G1", "G2",
+    "Baseline grass biomass", "Baseline grass %C",
+    "Grass biomass", "Goldenrod biomass", "Soil %N", "Soil %C",
+    "Grass %C", "Plant richness",
+    "Litter %C"
+  ),
+  label = c(
+    "G<sub>1</sub>", "G<sub>2</sub>",
+    "Baseline grass biomass", "Baseline grass %C",
+    "Grass biomass", "Goldenrod biomass", "Soil %N", "Soil %C",
+    "Grass %C", "Plant richness",
+    "Litter %C"
+  ),
+  fillcolor = c(
+    generation_colors["G1"], generation_colors["G2"],
+    generation_baseline_color, generation_baseline_color,
+    rep(generation_response_color, 7)
+  ),
+  fontcolor = c(
+    "white", "white",  # For generation nodes
+    rep("black", 9)    # For all other nodes
+  )
+)
+
+# Define edges for the generational SEM plot
+generation_edges <- data.frame(
+  from = c(
+    "Baseline grass biomass",
+    "Baseline grass biomass",
+    "G2", "G2", "G2",
+    "G1", "G1", "G1",
+    "Baseline grass %C",
+    "Grass biomass", "Grass %C",
+    "Goldenrod biomass"
+  ),
+  to = c(
+    "Grass biomass",
+    "Soil %N",
+    "Grass biomass", "Goldenrod biomass", "Soil %C",
+    "Grass biomass", "Goldenrod biomass", "Soil %C",
+    "Soil %C",
+    "Grass %C", "Litter %C",
+    "Plant richness"
+  ),
+  value = c(
+    0.39,
+    0.02,
+    11.36, -9.59, 0.31,
+    5.93, -1.93, 0.23,
+    0.10,
+    -0.04, 0.46,
+    -0.02
+  )
+)
+
+# Initialize the generation DOT script
+generation_dot_script <- "digraph SEM_PathDiagram { 
+  rankdir=TB
+  node [shape=rectangle style=filled fontname=\"Arial\"]
+  edge [fontname=\"Arial\"]
+  
+  { rank=source \"G1\" \"G2\" \"Baseline grass biomass\" \"Baseline grass %C\" }
+  { rank=same \"Grass biomass\" \"Goldenrod biomass\" \"Soil %N\" \"Soil %C\" }
+  { rank=same \"Grass %C\" \"Plant richness\" }
+  { rank=sink \"Litter %C\" }
+"
+
+# Add nodes with their properties
+for(i in 1:nrow(generation_nodes)) {
+  generation_dot_script <- paste0(generation_dot_script,
+    sprintf("  \"%s\" [label=<%s>, fillcolor=\"%s\" fontcolor=\"%s\"]\n",
+            generation_nodes$name[i], 
+            generation_nodes$label[i],
+            generation_nodes$fillcolor[i],
+            generation_nodes$fontcolor[i]))
+}
+
+# Generation plot edge creation
+for(i in 1:nrow(generation_edges)) {
+  predictor <- generation_edges$from[i]
+  response <- generation_edges$to[i]
+  estimate <- generation_edges$value[i]
+  
+  abs_estimate <- abs(estimate)
+  penwidth <- 1.5 + (abs_estimate / max(abs(generation_edges$value))) * 5
+  
+  if(predictor %in% c("Grass biomass", "Goldenrod biomass", "Grass %C", "Plant richness", "Soil %N", "Soil %C")) {
+    # For downstream effects, create two brown lines
+    # First line with label
+    generation_dot_script <- paste0(generation_dot_script, 
+      sprintf("  \"%s\" -> \"%s\" [color=\"#B5753C\", label=\" %.2f\", fontcolor=\"#B5753C\", penwidth=%.2f, style=\"%s\"];\n",
+              predictor, response, estimate, penwidth,
+              if(estimate < 0) "dashed" else "solid"))
+    # Second line without label
+    generation_dot_script <- paste0(generation_dot_script, 
+      sprintf("  \"%s\" -> \"%s\" [color=\"#B5753C\", label=\"\", penwidth=%.2f, style=\"%s\"];\n",
+              predictor, response, penwidth,
+              if(estimate < 0) "dashed" else "solid"))
+  } else {
+    # For generation and baseline effects
+    edge_color <- if(predictor == "G1") {
+      generation_colors["G1"]
+    } else if(predictor == "G2") {
+      generation_colors["G2"]
+    } else {
+      "#000000"  # black for baseline effects
+    }
+    
+    generation_dot_script <- paste0(generation_dot_script, 
+      sprintf("  \"%s\" -> \"%s\" [color=\"%s\", label=\" %.2f\", fontcolor=\"%s\", penwidth=%.2f, style=\"%s\"];\n",
+              predictor, response, edge_color, estimate, edge_color, penwidth,
+              if(estimate < 0) "dashed" else "solid"))
+  }
+}
+
+# Close the generation DOT script
+generation_dot_script <- paste0(generation_dot_script, "}")
+
+# Render the generation plot
+generation_plot <- grViz(generation_dot_script)
+
+# Display plot
+generation_plot
+
+png("Figures/SEM_treatment.png", width = 2000, height = 2400, res = 300)
+treatment_plot
+dev.off()
+
+png("Figures/SEM_generation.png", width = 2000, height = 2400, res = 300)
+generation_plot
+dev.off()
