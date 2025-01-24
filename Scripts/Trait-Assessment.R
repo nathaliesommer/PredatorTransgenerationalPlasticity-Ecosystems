@@ -20,10 +20,11 @@ library(DHARMa)
 ### Data Processing ----
 Behavior_2023 <- read.csv("Data/Behavior.csv")
 
-# Adjusted start time
+# Adjusted start time for sparse observations
 Behavior_2023$Time <- hms(Behavior_2023$Time)
 behavior_data <- subset(Behavior_2023,Time>(hms("8:40:00")))
 
+# Import temperature logger data
 behavior_temp <- read.csv("Data/Behavior_Temps.csv")
 
 behavior_temp <- behavior_temp %>%
@@ -65,9 +66,6 @@ height_model <- lmer(Y ~ Treatment + (1|Population),
                      data = behavior_data)
 
 VarCorr(height_model)
-summary(height_model)
-
-# population and individual explains a good chunk of variation
 
 # Center population heights
 behavior_data <- behavior_data %>%
@@ -137,6 +135,8 @@ print_diagnostic(density_estimate_ranges)
 #### LME repeated measures ----
 height_model_rm <- lmer(Y_centered ~ Treatment + (1|id), 
                         data = behavior_data)
+
+summary(height_model_rm)
 
 # emmeans post-hoc contrasts
 emmeans(height_model_rm, pairwise ~ Treatment)
@@ -432,13 +432,20 @@ g1p_data <- respiration_data %>%
   filter(Generation == "G1")
 g1p_model <- lmer(SMR ~ Temp_centered + (1 | Individual), data = g1p_data)
 
+summary(g1p_model)
+
 # G2 Predator
 g2p_data <- respiration_data %>% 
   filter(Generation == "G2")
 g2p_model <- lmer(SMR ~ Temp_centered + (1 | Individual), data = g2p_data)
 
+summary(g2p_model)
 
+g1g2p_model <- lmer(SMR ~ Temp_centered + Generation + (1 | Individual), data = respiration_data)
+  
+summary(g1g2p_model)
 
+emmeans(g1g2p_model, pairwise ~ Generation)
 
 ## Reaction Norm Plot by Type ----
 # Reaction Norm Plot
