@@ -2,13 +2,20 @@
 # Script: Analyzes ecosystems data
 # Authors: N.R. Sommer
 
-# Objects needed: 
+
+# Data Cleaning ----
+# Packages
+library(dplyr)
+
+# Objects needed to run this script:
   # N-min.R: N_min_calc
   # SIR.R: SIR_avg
   # Veg.R: diversity_calc; functional_groups_wide
 
+# Read in elemental data
 CNdata <- read.csv("Data/CN_Tidy_predators.csv")
 
+# Pivot columns
 CNdata <- CNdata %>%
   dplyr::select(Year, Sample_ID, Population, Site, CageTreatment, PercentN, PercentC, SampleType) %>%
   pivot_wider(names_from = SampleType, values_from = c(PercentN, PercentC))
@@ -49,29 +56,19 @@ combined_data <- combined_data %>%
     names_sep = "_"
   )
 
-
-# Relevel for model interpretation 
+# Relevel for easier model interpretation 
 combined_data$CageTreatment <- as.factor(combined_data$CageTreatment)
 combined_data$CageTreatment <- relevel(combined_data$CageTreatment, ref = "Vegetation")
 
-sample_sizes <- combined_data %>%
-  group_by(Population, CageTreatment) %>%
-  summarise(count = n(), .groups = 'drop') %>%
-  pivot_wider(names_from = CageTreatment, values_from = count)
-
-print("Sample sizes by Population and Treatment:")
-print(sample_sizes)
 
 
 
+# Linear Mixed-Effects Models ----
 # Packages
 library(lme4)
 library(DHARMa)
 library(car)
 library(boot)
-
-
-# Linear Mixed-Effects Models ----
 
 ### SORU Biomass----
 SORU_model <- lmer(SORU_Biomass_2023 ~ CageTreatment + PercentN_SOIL_2021 + 
@@ -838,11 +835,12 @@ write.table(trophic_impact_effects_df, file = output_file_trophic, row.names = F
 
 
 # Figures ----
+# The first set of figures use the basic DiarammeR format. The second set are updated for publication.
 
 library(DiagrammeR)
 
 
-#### Predators ----
+#### Predators (Basic) ----
 
 filtered_coefficients_predators <- filtered_coefficients %>%
   select(c(Response, Predictor, Estimate)) %>%
@@ -1039,7 +1037,7 @@ grViz(dot_script)
 
 
 
-#### Trophic Impact ----
+#### Trophic Impact (Basic) ----
 
 # Calculate adjusted estimates for herbivore and predator paths
 filtered_coefficients_trophic <- filtered_coefficients %>%
@@ -1172,7 +1170,7 @@ grViz(dot_script)
 
 
 
-#### Generational Effects ----
+#### Generational Effects (Basic) ----
 
 # Calculate adjusted estimates for F1_Predator and F2_Predator paths
 filtered_coefficients_generations <- filtered_coefficients %>%
@@ -1333,7 +1331,7 @@ if (nrow(filtered_paths_generations) > 0) {
 }
 
 
-# Pretty plot of the SEM ----
+## Predator-Herbivore SEM (Pretty) ----
 library(DiagrammeR)
 
 # Define custom colors for treatments
@@ -1462,7 +1460,7 @@ treatment_plot <- grViz(treatment_dot_script)
 # Display plot
 treatment_plot
 
-# Pretty plot of Generational Effects ----
+## Generational Effects (Pretty)----
 
 # Define custom colors for generations
 generation_colors <- c(
@@ -1602,10 +1600,10 @@ generation_plot <- grViz(generation_dot_script)
 # Display plot
 generation_plot
 
-png("Figures/SEM_treatment.png", width = 2000, height = 2400, res = 300)
-treatment_plot
-dev.off()
+#png("Figures/SEM_treatment.png", width = 2000, height = 2400, res = 300)
+#treatment_plot
+#dev.off()
 
-png("Figures/SEM_generation.png", width = 2000, height = 2400, res = 300)
-generation_plot
-dev.off()
+#png("Figures/SEM_generation.png", width = 2000, height = 2400, res = 300)
+#generation_plot
+#dev.off()

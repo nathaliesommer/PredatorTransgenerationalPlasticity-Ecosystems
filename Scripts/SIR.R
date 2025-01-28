@@ -1,6 +1,7 @@
 #### SIR calculation 
-## Code by A. Polussa, A.M. Dobson, N.R. Sommer
-# UPDATED Sep 17 2024
+## Code by N.R. Sommer
+
+# Object needed from this script: SIR_avg
 
 library(readr)
 library(dplyr)

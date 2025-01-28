@@ -1,4 +1,7 @@
 # Vegetation Allometry
+## Code by N.R. Sommer
+
+# Object needed from this script: diversity_calc; functional_groups_wide
 
 library(dplyr)
 library(tidyr)

@@ -1,4 +1,5 @@
 ### N-mineralization ----
+## Code by N.R. Sommer
 
 # Object needed from this script: N_min_calc
 
