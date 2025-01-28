@@ -704,7 +704,7 @@ indirect_effects_df <- do.call(rbind, lapply(all_indirect_paths, function(path) 
   # Flatten the path into a single row
   data.frame(
     Treatment = path[[1]]$Treatment,
-    Intermediates = paste(sapply(path, function(x) x$Intermediate),
+    Intermediates = paste(sapply(path, function(x) x$Intermediate), collapse = " "),
     Indirect_Effect_Size = path[[length(path)]]$Indirect_Effect_Size
   )
 }))
@@ -817,7 +817,7 @@ trophic_impact_effects_df <- do.call(rbind, lapply(all_trophic_impact_paths, fun
   # Flatten the path into a single row
   data.frame(
     Treatment = path[[1]]$Treatment,
-    Intermediates = paste(sapply(path, function(x) x$Intermediate)),
+    Intermediates = paste(sapply(path, function(x) x$Intermediate),
     Indirect_Effect_Size = path[[length(path)]]$Indirect_Effect_Size
   )
 }))
