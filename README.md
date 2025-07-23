@@ -54,8 +54,8 @@ All data is contained within the `Data` folder in their raw, original form. Desc
 ### Trait Data
 - Data/Behavior_Pred-G1G2_Herb-G2.csv: Contains behavioral data for predators and herbivores (G2 only) across generations
 - Data/Behavior_Temps.csv: Contains temperature data associated with behavioral measurements
-- Data/Respriation_Mass_2023_F1_F2.csv: Contains respiration data with mass measurements for F1 and F2 generations
-- Data/Respriation_2023_F1_F2_Raw.csv: Contains raw respiration data for F1 and F2 generations
+- Data/Respriation_Mass_2023_F1_F2.csv: Contains respiration data with mass measurements for G1 and G2 generations
+- Data/Respriation_2023_F1_F2_Raw.csv: Contains raw respiration data for G1 and G2 generations
 
 ## Scripts
 
